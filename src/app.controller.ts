@@ -9,5 +9,15 @@ export class AppController {
   getHello(): string {
     return this.appService.getHello();
   }
+
+  @Get('info')
+  getAppInfo() {
+    return this.appService.getAppInfo();
+  }
+
+  @Get('health')
+  getHealth() {
+    return this.appService.getHealth();
+  }
 }
 
