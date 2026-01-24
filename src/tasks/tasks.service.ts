@@ -2,11 +2,15 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { Task, TaskStatus, TaskPriority } from './interfaces/task.interface';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
+import { TaskHistoryService } from './task-history.service';
+import { TaskHistoryAction } from './interfaces/task-history.interface';
 
 @Injectable()
 export class TasksService {
   private tasks: Task[] = [];
   private idCounter = 1;
+
+  constructor(private readonly historyService: TaskHistoryService) {}
 
   findAll(): Task[] {
     return this.tasks;
@@ -35,32 +39,102 @@ export class TasksService {
     };
 
     this.tasks.push(task);
+    
+    this.historyService.createHistory(
+      task.id,
+      TaskHistoryAction.CREATED,
+      `Task "${task.title}" was created`,
+    );
+
     return task;
   }
 
   update(id: string, updateTaskDto: UpdateTaskDto): Task {
     const task = this.findOne(id);
 
-    if (updateTaskDto.title !== undefined) {
+    if (updateTaskDto.title !== undefined && updateTaskDto.title !== task.title) {
+      this.historyService.createHistory(
+        id,
+        TaskHistoryAction.UPDATED,
+        `Task title changed from "${task.title}" to "${updateTaskDto.title}"`,
+        'title',
+        task.title,
+        updateTaskDto.title,
+      );
       task.title = updateTaskDto.title;
     }
-    if (updateTaskDto.description !== undefined) {
+    if (updateTaskDto.description !== undefined && updateTaskDto.description !== task.description) {
+      this.historyService.createHistory(
+        id,
+        TaskHistoryAction.UPDATED,
+        `Task description was updated`,
+        'description',
+        task.description,
+        updateTaskDto.description,
+      );
       task.description = updateTaskDto.description;
     }
-    if (updateTaskDto.status !== undefined) {
+    if (updateTaskDto.status !== undefined && updateTaskDto.status !== task.status) {
+      this.historyService.createHistory(
+        id,
+        TaskHistoryAction.STATUS_CHANGED,
+        `Task status changed from "${task.status}" to "${updateTaskDto.status}"`,
+        'status',
+        task.status,
+        updateTaskDto.status,
+      );
       task.status = updateTaskDto.status as TaskStatus;
     }
-    if (updateTaskDto.priority !== undefined) {
+    if (updateTaskDto.priority !== undefined && updateTaskDto.priority !== task.priority) {
+      this.historyService.createHistory(
+        id,
+        TaskHistoryAction.PRIORITY_CHANGED,
+        `Task priority changed from "${task.priority}" to "${updateTaskDto.priority}"`,
+        'priority',
+        task.priority,
+        updateTaskDto.priority,
+      );
       task.priority = updateTaskDto.priority as TaskPriority;
     }
-    if (updateTaskDto.category !== undefined) {
+    if (updateTaskDto.category !== undefined && updateTaskDto.category !== task.category) {
+      this.historyService.createHistory(
+        id,
+        TaskHistoryAction.CATEGORY_CHANGED,
+        `Task category changed from "${task.category || 'none'}" to "${updateTaskDto.category}"`,
+        'category',
+        task.category,
+        updateTaskDto.category,
+      );
       task.category = updateTaskDto.category;
     }
     if (updateTaskDto.tags !== undefined) {
-      task.tags = updateTaskDto.tags;
+      const tagsChanged = JSON.stringify(task.tags.sort()) !== JSON.stringify(updateTaskDto.tags.sort());
+      if (tagsChanged) {
+        this.historyService.createHistory(
+          id,
+          TaskHistoryAction.TAGS_CHANGED,
+          `Task tags changed from [${task.tags.join(', ')}] to [${updateTaskDto.tags.join(', ')}]`,
+          'tags',
+          task.tags,
+          updateTaskDto.tags,
+        );
+        task.tags = updateTaskDto.tags;
+      }
     }
     if (updateTaskDto.dueDate !== undefined) {
-      task.dueDate = new Date(updateTaskDto.dueDate);
+      const oldDueDate = task.dueDate?.toISOString();
+      const newDueDate = new Date(updateTaskDto.dueDate).toISOString();
+      if (oldDueDate !== newDueDate) {
+        this.historyService.createHistory(
+          id,
+          TaskHistoryAction.UPDATED,
+          `Task due date changed from "${oldDueDate || 'none'}" to "${newDueDate}"`,
+          'dueDate',
+          task.dueDate,
+          new Date(updateTaskDto.dueDate),
+        );
+        task.dueDate = new Date(updateTaskDto.dueDate);
+      }
     }
 
     task.updatedAt = new Date();
@@ -68,11 +142,15 @@ export class TasksService {
   }
 
   remove(id: string): void {
+    const task = this.findOne(id);
     const index = this.tasks.findIndex((t) => t.id === id);
-    if (index === -1) {
-      throw new NotFoundException(`Task with ID ${id} not found`);
-    }
     this.tasks.splice(index, 1);
+    
+    this.historyService.createHistory(
+      id,
+      TaskHistoryAction.DELETED,
+      `Task "${task.title}" was deleted`,
+    );
   }
 
   findByStatus(status: TaskStatus): Task[] {
@@ -125,9 +203,21 @@ export class TasksService {
     ids.forEach((id) => {
       try {
         const task = this.findOne(id);
+        const oldStatus = task.status;
         task.status = status;
         task.updatedAt = new Date();
         updatedTasks.push(task);
+        
+        if (oldStatus !== status) {
+          this.historyService.createHistory(
+            id,
+            TaskHistoryAction.STATUS_CHANGED,
+            `Task status changed from "${oldStatus}" to "${status}" (bulk update)`,
+            'status',
+            oldStatus,
+            status,
+          );
+        }
       } catch (error) {
         // Skip tasks that don't exist
       }

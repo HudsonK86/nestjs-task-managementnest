@@ -12,13 +12,18 @@ import {
   Patch,
 } from '@nestjs/common';
 import { TasksService } from './tasks.service';
+import { TaskHistoryService } from './task-history.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { Task, TaskStatus, TaskPriority } from './interfaces/task.interface';
+import { TaskHistoryAction } from './interfaces/task-history.interface';
 
 @Controller('tasks')
 export class TasksController {
-  constructor(private readonly tasksService: TasksService) {}
+  constructor(
+    private readonly tasksService: TasksService,
+    private readonly historyService: TaskHistoryService,
+  ) {}
 
   @Get()
   findAll(
@@ -59,6 +64,19 @@ export class TasksController {
   @Get('tags')
   getTags(): string[] {
     return this.tasksService.getTags();
+  }
+
+  @Get('history')
+  getHistory(@Query('action') action?: string) {
+    if (action) {
+      return this.historyService.getHistoryByAction(action as TaskHistoryAction);
+    }
+    return this.historyService.getAllHistory();
+  }
+
+  @Get(':id/history')
+  getTaskHistory(@Param('id') id: string) {
+    return this.historyService.getTaskHistory(id);
   }
 
   @Get(':id')
