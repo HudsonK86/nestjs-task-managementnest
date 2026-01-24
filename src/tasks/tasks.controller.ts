@@ -9,6 +9,7 @@ import {
   Query,
   HttpCode,
   HttpStatus,
+  Patch,
 } from '@nestjs/common';
 import { TasksService } from './tasks.service';
 import { CreateTaskDto } from './dto/create-task.dto';
@@ -20,12 +21,27 @@ export class TasksController {
   constructor(private readonly tasksService: TasksService) {}
 
   @Get()
-  findAll(@Query('status') status?: string, @Query('priority') priority?: string): Task[] {
+  findAll(
+    @Query('status') status?: string,
+    @Query('priority') priority?: string,
+    @Query('category') category?: string,
+    @Query('tag') tag?: string,
+    @Query('search') search?: string,
+  ): Task[] {
+    if (search) {
+      return this.tasksService.search(search);
+    }
     if (status) {
       return this.tasksService.findByStatus(status as TaskStatus);
     }
     if (priority) {
       return this.tasksService.findByPriority(priority as TaskPriority);
+    }
+    if (category) {
+      return this.tasksService.findByCategory(category);
+    }
+    if (tag) {
+      return this.tasksService.findByTag(tag);
     }
     return this.tasksService.findAll();
   }
@@ -33,6 +49,16 @@ export class TasksController {
   @Get('statistics')
   getStatistics() {
     return this.tasksService.getStatistics();
+  }
+
+  @Get('categories')
+  getCategories(): string[] {
+    return this.tasksService.getCategories();
+  }
+
+  @Get('tags')
+  getTags(): string[] {
+    return this.tasksService.getTags();
   }
 
   @Get(':id')
@@ -44,6 +70,20 @@ export class TasksController {
   @HttpCode(HttpStatus.CREATED)
   create(@Body() createTaskDto: CreateTaskDto): Task {
     return this.tasksService.create(createTaskDto);
+  }
+
+  @Post('bulk/update-status')
+  @HttpCode(HttpStatus.OK)
+  bulkUpdateStatus(
+    @Body() body: { ids: string[]; status: TaskStatus },
+  ): Task[] {
+    return this.tasksService.bulkUpdateStatus(body.ids, body.status);
+  }
+
+  @Post('bulk/delete')
+  @HttpCode(HttpStatus.OK)
+  bulkDelete(@Body() body: { ids: string[] }): { deleted: number; failed: number } {
+    return this.tasksService.bulkDelete(body.ids);
   }
 
   @Put(':id')
